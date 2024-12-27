@@ -48,9 +48,9 @@ Any color palette can be used, if the user does not prefer the ROYGBIV pattern. 
     - The layer names can be edited within the cross section editor if necessary (again, this is a temporary step only for the color palette creation → layer names can be reverted later if desired)
 3) Open the Color editor by clicking ![color_picker.png](supporting_images/color_picker.png), by typing "color192" into the command window, or by selecting the menu Display → Color/Visibility
 4) Edit the 16 colors in the bottom right corner of the palette, where the left most is TOP and counts up until BOTTOM, as shown below:
-    - <img src="supporting_images/color_palette_1.png" width="50%" height="50%"/>
+    - ![](supporting_images/color_palette_1.png)
     - Note: clicking the large area immediately to the right of the palette will expose an RGB color picker, in case you prefer to assign color values numerically:
-        - <img src="supporting_images/color_palette_2.png" width="50%" height="50%"/>
+        - ![](supporting_images/color_palette_2.png)
 5) Once satisfied with all colors, select Save → Save color palette → navigate to C:\Cadence\PCB_colors\ (if this doesn't exist, see 'installation' section above') → save the palette with whatever name you wish
 6) Navigate to C:\Cadence\SPB_23.1\share\pcb\etc and open "load_pcb_colors.il" with a text editor
     - CTRL+F to search in the file and look for PALETTE_NAME and update its value to be the filename you created in step 5.
