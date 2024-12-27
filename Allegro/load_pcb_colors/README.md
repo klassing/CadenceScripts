@@ -61,7 +61,7 @@ By default, this script's files will implement a ROYGBIV color palette to consis
 
 <br>
 
-<img src="supporting_images/roygbiv_palette.png" width="50%" height="50%"/>
+![](supporting_images/roygbiv_palette.png)
 
 ## Author(s)
 - Author(s): Ryan Klassing
