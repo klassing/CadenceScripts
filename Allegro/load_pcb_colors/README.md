@@ -48,9 +48,9 @@ Any color palette can be used, if the user does not prefer the ROYGBIV pattern. 
     - The layer names can be edited within the cross section editor if necessary (again, this is a temporary step only for the color palette creation → layer names can be reverted later if desired)
 3) Open the Color editor by clicking ![color_picker.png](supporting_images/color_picker.png), by typing "color192" into the command window, or by selecting the menu Display → Color/Visibility
 4) Edit the 16 colors in the bottom right corner of the palette, where the left most is TOP and counts up until BOTTOM, as shown below:
-    - <img src="supporting_images/color_palette_1.png" width="35%" height="35%"/>
+    - <img src="supporting_images/color_palette_1.png" width="50%" height="50%"/>
     - Note: clicking the large area immediately to the right of the palette will expose an RGB color picker, in case you prefer to assign color values numerically:
-        - <img src="supporting_images/color_palette_2.png" width="35%" height="35%"/>
+        - <img src="supporting_images/color_palette_2.png" width="50%" height="50%"/>
 5) Once satisfied with all colors, select Save → Save color palette → navigate to C:\Cadence\PCB_colors\ (if this doesn't exist, see 'installation' section above') → save the palette with whatever name you wish
 6) Navigate to C:\Cadence\SPB_23.1\share\pcb\etc and open "load_pcb_colors.il" with a text editor
     - CTRL+F to search in the file and look for PALETTE_NAME and update its value to be the filename you created in step 5.
@@ -58,7 +58,10 @@ Any color palette can be used, if the user does not prefer the ROYGBIV pattern. 
 
 ## Default ROYGBIV palette
 By default, this script's files will implement a ROYGBIV color palette to consistently transition through the color wheel based on the layer (and to drive consistency across designs with different layer counts).  The intent with this methodology is to make it easier for team members to quickly navigate multiple PCB files (for quickly understanding routing layers in a design review, for example).  Below is a visualization to help demonstrate the deployed layer color strategy:
-<img src="supporting_images/roygbiv_palette.png" width="35%" height="35%"/>
+
+<br>
+
+<img src="supporting_images/roygbiv_palette.png" width="50%" height="50%"/>
 
 ## Author(s)
 - Author(s): Ryan Klassing
