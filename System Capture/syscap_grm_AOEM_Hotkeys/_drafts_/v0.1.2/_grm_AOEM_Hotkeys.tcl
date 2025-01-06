@@ -68,9 +68,6 @@ namespace eval grm::AOEM_Hotkeys {
         #define the desired HTML Color for DNU "x" visualization
         set clrDNUx "#ff0000"
 
-        #define itemType for "x" visualization (found experimentally by using getType)
-        set DBTline 6
-
         #define the desired width for the DNU "x" visualization
         set widthDNUx 3
 
@@ -288,20 +285,54 @@ namespace eval grm::AOEM_Hotkeys {
     }
 
     # ----------------------------------------------------------------------------------
-    # Apply DNU to the BOM property on an object, keeping the tag hidden
+    # Apply DNU to the BOM property on an object (if it doesn't exist), and ensure the BOM property is not displayed
     # ----------------------------------------------------------------------------------
     proc setBOMDNUHidden { objID } {
-        #ensure the object is selected, but don't zoom to the object
-        sch::dbSelectObjectByIdEx $objID $::sch::DBFalse $::sch::DBFalse
+        #setup some variables to support calling the property modifications
+        set propertyName BOM
+        set propertyValue DNU
+        set propertyDisplay nodisp
+        set command addProp
 
-        #add the DNU BOM property
-        addProp -name {BOM} -value {DNU} -type 0 -display nodisp
+        #grab data regarding active page and page of the object
+        set currentPage [sch::dbGetActivePage]
+        set currentPageSpath [sch::dbGetActivePageSpath]
+        set bReturnPage 0
+
+        #property modification will only be successful if the object's page is active
+        #check if the object's page is currently active
+        if {[sch::dbGetPageOfObject $objID] != $currentPage} {
+            #set a flag to remind us to revert the page when we're done
+            set bReturnPage 1
+
+            #ensure nothing else is selected
+            unselectAll
+
+            #Activate the object's page by selecting while setting navigation to true
+            sch::dbSelectObjectByIdEx $objID $::sch::DBTrue $::sch::DBFalse
+        } else {
+            #ensure only this component is selected
+            onlyselectByID $objID
+        }
+
+        #remove any existing BOM tag in case the user currently has this component applied to a BOM
+        deleteProp -name $propertyName
+
+        #Add the BOM property back and set to DNU the property modification
+        addProp -name $propertyName -value $propertyValue -display $propertyDisplay
+
+        #unselect all components
+        unselectAll
+
+        #return to the original page if necessary
+        if {$bReturnPage} { openItem $currentPageSpath SCH PAGE }
+
     }
 
     # ----------------------------------------------------------------------------------
     # Boolean check to determine if the objectID provided contains a BOM attribute set to DNU
     # ----------------------------------------------------------------------------------
-    proc checkForDNU { objID } {
+    proc checkForDNUbyID { objID } {
         if {"DNU" == [sch::dbGetPropertyValueFromSPath [sch::dbGetSPath $objID] {BOM}]} {
             return 1
         } else { 
@@ -310,12 +341,20 @@ namespace eval grm::AOEM_Hotkeys {
     }
 
     # ----------------------------------------------------------------------------------
+    # Boolean check to determine if the component provided contains a BOM attribute set to DNU
+    # ----------------------------------------------------------------------------------
+    proc checkForDNUbySpath { compSpath } {
+        if {"DNU" == [sch::dbGetPropertyValueFromSPath $compSpath {BOM}]} {
+            return 1
+        } else { 
+            return 0
+        } 
+    }
+
+    # ----------------------------------------------------------------------------------
     # Boolean check to determine if the objectID provided contains a visualization "x" over it
     # ----------------------------------------------------------------------------------
-    proc checkForDNUx { objID } {
-        #Setup boolean flag - default to assume it's not found
-        set bDNUx 0
-
+    proc getDNUxLines { objID } {
         #To be considered "found", we must find 2 line objects with the following properties:
         #   - TopLeft -> BottomRight locations must exactly match the objID passed
         #   - BottomLeft -> TopRight locations must exaclty match the objID passed
@@ -330,7 +369,7 @@ namespace eval grm::AOEM_Hotkeys {
         set compBox [sch::dbGetShapeBBox $objID]
 
         #get a list of items within this bounding box
-        set lBBoxObjs [sch::dbGetItemsInBBox [sch::dbGetActivePage] $compBox]        
+        set lBBoxObjs [sch::dbGetItemsInBBox [sch::dbGetPageOfObject $objID] $compBox]        
         set lXlines []
 
         #loop through all selected items and see if we can find a pair of lines that meet the criteria above
@@ -358,12 +397,11 @@ namespace eval grm::AOEM_Hotkeys {
     # Boolean check to determine if the objectID provided is a line object
     # ----------------------------------------------------------------------------------
     proc isLine { objID } {
-        return [expr [sch::dbGetType $objID] == $grm::AOEM_Hotkeys::DBTline ? 1 : 0]
+        return [expr [sch::dbGetType $objID] == $::sch::DBTLine ? 1 : 0]
     }
 
-
     # ----------------------------------------------------------------------------------
-    # Procedure to toggle the DNU tag on/off the selected component(s).
+    # Procedure to toggle the DNU tag on/off for the passed list of objectIDs
     #   In case 1 component is selected, the BOM tag will be set to the opposite of its previous sate.
     #   In case > 1 component is selected, the BOM tag will be applied to all components equally with the following logic:
     #       If all components have the DNU BOM tag already, then all DNU tags will be removed
@@ -378,48 +416,74 @@ namespace eval grm::AOEM_Hotkeys {
     #   Example: 3 components are selected where all 3 have BOM = DNU
     #       BOM attribute will be removed from all selected components
     # ----------------------------------------------------------------------------------
-    proc toggleDNU {} {
-        #Grab a list of all objects selected
-        set lSelObjs [getSel]
+    proc toggleDNU { lobjIDs } {
+        #keep a cache of the current page, in case we navigate away - we'll return here once we're done
+        set ogPageSpath [sch::dbGetActivePageSpath]
 
         #Unselect all objects to prevent applying changes to unintentded items
         unselectAll
 
-        #start with assuming we will be applying DNU tags
-        set bApplyDNU [checkForApplyingDNU $lSelObjs]
+        #collect a list of unique refdes's based on the provided items - helps us avoid duplicating efforts for multi-gate components
+        set lRefDes [getUniqueRefDesByIDs $lobjIDs]
 
-        #loop through all of the component objects found earlier and add/remove the BOM tag as decided above for the components
-        foreach objID $lSelObjs {
-            #Determine if we're adding or removing
-            if { $bApplyDNU } {
-                #add the DNU BOM property
-                puts "Applying DNU"
-                addDNU $objID
-            } else {
-                #remove BOM property
-                puts "Removing DNU"
-                remDNU $objID
+        #get a list of all Spaths for each instance/gate of all the provided refdes
+        set lCompSpaths []
+        foreach refDes $lRefDes { lappend lCompSpaths [getSpathListOfComponentSafe $refDes] }
+
+        #remove all brackets applied within the compiled list, so that it can be treated as a single level list
+        set lCompSpaths [string map {\{ "" \} ""} $lCompSpaths]
+        
+        #check if we should be applying or removing DNU from all components
+        set bApplyDNU [checkForApplyingDNU $lCompSpaths]
+
+        #get a list of all locations for the instances/gates that we'll be updating, organized by page to minimize page transitions
+        #   {{page1 {x1 y1} {x2 y2} {x3 y3} ... } {page2 {x1 y1} ...} ...}
+        set lInstanceLocationsByPage [getInstanceLocationsByPage $lCompSpaths]
+
+        #loop through all instance locations, one page at a time, selecting each desired component on that page
+        foreach lPageInstanceCollection $lInstanceLocationsByPage {
+            #pageSpath is the first index
+            set pageSpath [lindex $lPageInstanceCollection 0]
+
+            #all remaining indeces are {x y} coordinate pairs for gates/instances on this page
+            for {set idx 1} {$idx < [llength $lPageInstanceCollection]} {incr idx} {
+                #get the object ID of the component at these coordinates
+                set objID [getIDbyLocation $pageSpath [lindex $lPageInstanceCollection $idx]]
+
+                #handle the application or removal of the DNU for this object
+                if { $bApplyDNU } {
+                    addDNU $objID
+                } else {
+                    remDNU $objID
+                }
             }
-
         }
+
+        #See if we need to return to the original page
+        if {$ogPageSpath != [sch::dbGetActivePageSpath]} {openItem $ogPageSpath SCH PAGE}
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to check whether we should apply or remove DNU based on the selected components
+    # Procedure to toggle the DNU tag on/off for the selected components
+    # ----------------------------------------------------------------------------------
+    proc toggleDNUselection {} {
+        toggleDNU [getSel]
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to check whether we should apply or remove DNU based on the passed list of component instances
     #   return 1 = apply DNU to all components
     #   return 0 = remove DNU from all components
     # ----------------------------------------------------------------------------------
-    proc checkForApplyingDNU { lSelObjs } {
+    proc checkForApplyingDNU { lCompSpaths } {
         # Apply the following logic:
-        # If all selected components have DNU, then remove DNU from all
-        # otherwise, add DNU to all components
+        # If all passed component instances are set to DNU, then remove DNU from all
+        # otherwise, add DNU to all component instances
 
-        #loop through all selected components
-        foreach selObj $lSelObjs {
-            if {[grm::filter::isComponent $selObj] && ![grm::filter::isTestpoint $selObj]} {
-                #see if it has DNU - if not, then we can already return 1
-                if { ![checkForDNU $selObj] } {return 1}
-            }
+        #loop through all components instances
+        foreach compSpath $lCompSpaths {
+            #see if it has DNU - if not, then we can already return 1
+            if { ![checkForDNUbySpath $compSpath]} {return 1}
         }
 
         #if we didn't find any components missing the DNU tag, then we should be removing DNU
@@ -432,11 +496,8 @@ namespace eval grm::AOEM_Hotkeys {
     proc addDNU { objID } {
         #ensure the passed object ID is a component, but not a testpoint
         if {[grm::filter::isComponent $objID] && ![grm::filter::isTestpoint $objID]} {
-            #Ensure only the component is selected
-            onlyselectByID $objID
-
-            #add the DNU BOM property
-            addProp -name {BOM} -value {DNU} -type 0 -display nodisp
+            #add the DNU BOM tag
+            setBOMDNUHidden $objID
 
             #add the DNU x visualization
             addDNUx $objID
@@ -485,7 +546,7 @@ namespace eval grm::AOEM_Hotkeys {
         #ensure the passed object ID is a component
         if {[grm::filter::isComponent $objID] && ![grm::filter::isTestpoint $objID]} {
             #remove BOM property and update fill color as long as it contains DNU currently - otherwise leave it alone
-            if { [checkForDNU $objID] } {
+            if { [checkForDNUbyID $objID] } {
                 #Ensure only the component is selected
                 onlyselectByID $objID
 
@@ -515,7 +576,7 @@ namespace eval grm::AOEM_Hotkeys {
         #ensure the passed object ID is a component
         if {[grm::filter::isComponent $objID] && ![grm::filter::isTestpoint $objID]} {
             #check if there are any X lines to remove
-            set lXlines [checkForDNUx $objID]
+            set lXlines [getDNUxLines $objID]
 
             #only proceed if we found xLines
             if { [llength $lXlines] > 0 } {
@@ -655,6 +716,178 @@ namespace eval grm::AOEM_Hotkeys {
         return [::tcl::mathfunc::max {*}$lYpoints]
     }
 
+    proc addXtoDNU_currentPage {} {
+        addXtoDNU_page  [ sch::dbGetActivePage ]
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to scan the selected page for components set to DNU and ensure they all have the X visualization applied
+    # ----------------------------------------------------------------------------------
+    proc addXtoDNU_page { pgID } {
+        #Grab a list of all items on the page
+        set lPgObjs [sch::dbGetPageItems $pgID]
+
+        #loop through all items on the page
+        foreach objID $lPgObjs {
+            #only perform the check if the item is a non testpoint component
+            if {[grm::filter::isComponent $objID] && ![grm::filter::isTestpoint $objID]} {
+                #check if the item has a DNU BOM tag, but does not already have an X
+                if {[checkForDNUbyID $objID] && [llength [getDNUxLines $objID]] == 0} {
+
+                    #ensure the BOM tag is hidden
+                    setBOMDNUHidden $objID
+
+                    #apply the DNU X
+                    addDNUx $objID
+                }
+            }
+        }
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to return an item's ref des by its object ID
+    # ----------------------------------------------------------------------------------
+    proc getRefDesByID { objID } {
+        return [lindex [lindex [sch::dbxGetRefDesAndOriginFromInstSpath [ sch::dbGetSPath $objID]] 1] 1]
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to return a list of unique reference designators from the provided list of object IDs
+    # ----------------------------------------------------------------------------------
+    proc getUniqueRefDesByIDs { lobjIDs } {
+        #setup a list to be returned
+        set lUniqueRefDes {}
+
+        #loop through each ID
+        foreach objID $lobjIDs {
+            #only perform the check if the item is a non testpoint component
+            if {[grm::filter::isComponent $objID] && ![grm::filter::isTestpoint $objID]} {
+                #get the current refdes
+                set refDes [getRefDesByID $objID]
+
+                #add it to the list if we haven't already found this refdes
+                if {[lsearch -exact $lUniqueRefDes $refDes] < 0} {lappend lUniqueRefDes $refDes}
+            }
+        }
+
+        #return the list of unique refDes
+        return $lUniqueRefDes
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to safely return a list of Spaths for all found instances/gates of a given Ref Des
+    #   procedure is considered safer than sdaConn::getSpathListOfComponent because there seems to be a bug
+    #   in the default procedure where if a component is selected when the command is executed,
+    #   that instance/gate of the component will be deleted from the schematic.  This tool is really smart...
+    # ----------------------------------------------------------------------------------
+    proc getSpathListOfComponentSafe { refDes } {
+        #make sure nothing is selected to avoid the bug described above
+        unselectAll
+
+        #return the list of all Spaths for this component within the root design
+        return [sdaConn::getSpathListOfComponent $refDes [sch::dbGetRootDesignName]]
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to return a list of locations <pageSpath x y> for all provided instance/gate Spaths
+    #   the returned list will be organized by pageSpaths, to minimize page transitions needed in calling procedures
+    #   { {pageSpath1 {x1 y1} {x2 y2} {x3 y3} ...} {pageSpath2 {x1 y1} {x2 y2} ...} {pageSpath3 ... } }
+    #   
+    #   where:
+    #       pageSpath is the Spath for the page of the given symbol instance/gate
+    #       x is the x coordinate of the center of the given symbol instance/gate
+    #       y is the y coordinate of the center of the given symbol instance/gate
+    # ----------------------------------------------------------------------------------
+    proc getInstanceLocationsByPage { lCompSpaths } {
+
+        #pepare a couple lists to collect and organize the instance locations
+        set lInstanceLocations {}
+        set lInstanceLocationsByPage {}
+
+        #prepare a couple list to collect and organize just the pageSpaths in, for helping us organize the instance lists later on
+        set lPageSpaths {}
+
+        #loop through each instance
+        foreach compSpath $lCompSpaths {
+            #grab the page and x/y coordinates for this instance/gate into JSON format
+            set compJSON [sch::dbGetInfoFromInstanceSpath $compSpath]
+
+            if {$compJSON != {}} {
+                #pull the page and x/y coordinates out of JSON into usable variables
+                set compDict [json::json2dict $compJSON]
+                set compPageSpath [dict get $compDict id]
+                set compX [dict get $compDict x]
+                set compY [dict get $compDict y]
+
+                #add the pageSpath to the running list if we haven't already found this one
+                if {[lsearch -exact $lPageSpaths $compPageSpath] < 0} {
+                    #check if this is the currently active page - if so, make sure it's at the begining of the list, otherwise append
+                    if {$compPageSpath == [sch::dbGetActivePageSpath]} {
+                        set lPageSpaths [linsert $lPageSpaths 0 $compPageSpath]
+                    } else {
+                        lappend lPageSpaths $compPageSpath
+                    }
+                }
+
+                #append this gate instance's information
+                lappend lInstanceLocations [list $compPageSpath $compX $compY]
+            }
+        }
+
+        #ideally - we want the currently active page to be placed first into the organized list, so that any calling function
+        #that iterates through this list, would start with processing components on the already active page
+        #To do this, we'll see if the list of pages 
+
+        #now loop through the unique pageSpaths and create the organized list with matches from the collected instance locations
+        foreach pageSpath $lPageSpaths {
+            #first index of the page list is the pageSpath itself
+            set lPageInstances [list $pageSpath]
+
+            #remaining indeces of the list are {x y} coordinates for each instance on the page that we care about
+            foreach instanceLocation $lInstanceLocations {
+                if {[lindex $instanceLocation 0] == $pageSpath} {
+
+                    #grab the X and Y coordinates of this instance location
+                    set xyCoordinate [list [lindex $instanceLocation 1] [lindex $instanceLocation 2]]
+
+                    #add the coordinate pair to the page instance list
+                    lappend lPageInstances $xyCoordinate
+                }
+            }
+
+            #add the collected list {page {coord1} {coord2} ...} to the running organized list
+            lappend lInstanceLocationsByPage $lPageInstances
+        }
+
+        #return the organized list of all instance locations
+        return $lInstanceLocationsByPage
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to return an object's ID by providing the page + coordinates found by sch::dbGetInfoFromInstanceSpath
+    #   pageSpath = Spath to the page that the component is located on
+    #   compCoordinates = list formatted as {x y} for the coordinates of the component
+    # ----------------------------------------------------------------------------------
+    proc getIDbyLocation { pageSpath compCoordinates } {
+        #navigate to the new page if necessary
+        if {$pageSpath != [sch::dbGetActivePageSpath]} { openItem $pageSpath SCH PAGE }
+
+        #grab the coordinates
+        set xLoc [lindex $compCoordinates 0]
+        set yLoc [lindex $compCoordinates 1]
+
+        #select only the component at the location provided
+        unselectAll
+        selectObject -occPath $pageSpath -type INST $xLoc $yLoc
+
+        #grab the selected ID
+        set objID [getSel]
+        unselectAll
+
+        #return the found ID
+        return $objID
+    }
+
     # ----------------------------------------------------------------------------------
     # Create a custom menu bar for all keybindings above
     #   Note: in order to apply a Syscap hotkey/shortcut/keybinding, the command
@@ -677,7 +910,8 @@ namespace eval grm::AOEM_Hotkeys {
                 {"Add GND Symbol" {} {grm::AOEM_Hotkeys::addGenericGNDtoCursor} {}}
                 {"Add GND Net" {} {grm::AOEM_Hotkeys::addGNDtoCursor} {}}
                 {"Add NC Symbol" {} {grm::AOEM_Hotkeys::addNCtoCursor} {}}
-                {"Toggle DNU" {} {grm::AOEM_Hotkeys::toggleDNU} {}}
+                {"Toggle DNU" {} {grm::AOEM_Hotkeys::toggleDNUselection} {}}
+                {"Apply DNU X to All Symbols on Current Page" {} {grm::AOEM_Hotkeys::addXtoDNU_currentPage} {}}
             }}
             {"&Utilities" {sch} {} {
                 {"FindPart: Eng Search" {} {grm::AOEM_Hotkeys::FPENG} {}}
