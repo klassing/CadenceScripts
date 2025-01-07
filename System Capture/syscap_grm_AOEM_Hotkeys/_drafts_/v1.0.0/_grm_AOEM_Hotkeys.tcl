@@ -9,15 +9,17 @@
 #   Date: 2024/12/26
 #
 #   Release Notes:
-#     ------v0.1.2------
+#     ------v1.0.0------
 #       Release Date: 
 #           2024/12/26
 #       Description:
 #           Updated local object type checks to utilize grm::filter item type checks for better maintenance
 #           Updated net color scripts to apply color to all nets selected, even if other object types are also selected
-#           Added new setDNU function to apply DNU to the BOM tag of the selected component
-#           Added new setDNU_vis function to apply DNU to the BOM tag and add visualization of the non placed component
-#           Added new remDNU function to remove the DNU BOM tag and remove any added DNU visualizations
+#           Added new toggleDNU functionality to allow one-button management of DNU visualization of components (supports single component or multi-selection)
+#               Note: this also ensures all gates of a component are set at the same time, regardless of which pages the gates are spread across
+#           Added new addXtoDNU_currentPage functionality to allow converting a specific page from traditional BOM tag only, to BOM tag + X visualization
+#           Added new addXtoDNU_allPages functionality to allow converting an entire design from traditional BOM tag only, to BOM tag + X visualization
+#               Note: this can take up to 5-7minutes on a very large design with many DNU components
 #
 #     ------v0.1.1------
 #       Release Date: 
@@ -35,7 +37,7 @@
 #/////////////////////////////////////////////////////////////////////////////////
 
 #define this tcl file
-package provide _grm_AOEM_Hotkeys 0.1.2
+package provide _grm_AOEM_Hotkeys 1.0.0
 
 #add external dependent tcl scripts
 package require _grm_menu
@@ -69,7 +71,7 @@ namespace eval grm::AOEM_Hotkeys {
         set clrDNUx "#ff0000"
 
         #define the desired width for the DNU "x" visualization
-        set widthDNUx 3
+        set widthDNUx 2
 
         #define the desired HTML Color for DNU component visualization
         set clrDNUcompfill "#383838"
@@ -83,12 +85,11 @@ namespace eval grm::AOEM_Hotkeys {
         #define default shape fill color (for when we clear the DNU visualization)
         set clrDEFcompline "#000000"
 
-
     # ----------------------------------------------------------------------------------
     # Unselect all objects passed by their ID
     # ----------------------------------------------------------------------------------
-    proc unselectByID {lObjIDs} {
-        foreach objID $lObjIDs {
+    proc unselectByID {lobjIDs} {
+        foreach objID $lobjIDs {
             sch::dbUnselectObjectById $objID $::sch::DBFalse
         }
     }
@@ -96,8 +97,8 @@ namespace eval grm::AOEM_Hotkeys {
     # ----------------------------------------------------------------------------------
     # Select all objects passed by their ID
     # ----------------------------------------------------------------------------------
-    proc selectByID {lObjIDs} {
-        foreach objID $lObjIDs {
+    proc selectByID {lobjIDs} {
+        foreach objID $lobjIDs {
             sch::dbSelectObjectByIdEx $objID $::sch::DBFalse $::sch::DBFalse
         }
     }
@@ -116,116 +117,68 @@ namespace eval grm::AOEM_Hotkeys {
     # ----------------------------------------------------------------------------------
     # Unselect everything except for the passed object IDs
     # ----------------------------------------------------------------------------------
-    proc onlyselectByID {lObjIDs} {
+    proc onlyselectByID {lobjIDs} {
         #unselect all items
         unselectAll
 
         #Ensure all desired objects are selected
-        selectByID $lObjIDs
+        selectByID $lobjIDs
     }
 
     # ----------------------------------------------------------------------------------
     # Set the selection as a Power Net
     # ----------------------------------------------------------------------------------
     proc setNetColorPower {} {
-        #Grab a list of all objects selected
-        set lSelObjs [getSel]
+        #Grab a list of all unique nets selected
+        set lNets [getUniqueValidNets [getSel]]
 
-        #Loop through and set all nets to the power color
-        foreach objID $lSelObjs {
-            #only set the color if the selection is a net
-            if { [grm::filter::isWire $objID] } {
-                #Select the object
-                onlyselectByID $objID
+        #select only the nets
+        onlyselectByID $lNets
 
-                #log the action
-                puts "Setting Line Color ==> $grm::AOEM_Hotkeys::clrPower"
-
-                #set the color
-                setLineColor $grm::AOEM_Hotkeys::clrPower
-            }
-        }
-
-        #Select the original objects to return to the users original state
-        onlyselectByID $lSelObjs
+        #set the color to all selected nets at once
+        setLineColor $grm::AOEM_Hotkeys::clrPower
     }
 
     # ----------------------------------------------------------------------------------
     # Set the selection as a GND Net
     # ----------------------------------------------------------------------------------
     proc setNetColorGND {} {
-        #Grab a list of all objects selected
-        set lSelObjs [getSel]
+        #Grab a list of all unique nets selected
+        set lNets [getUniqueValidNets [getSel]]
 
-        #Loop through and set all nets to the power color
-        foreach objID $lSelObjs {
-            #only set the color if the selection is a net
-            if { [grm::filter::isWire $objID] } {
-                #Select the object
-                onlyselectByID $objID
+        #select only the nets
+        onlyselectByID $lNets
 
-                #log the action
-                puts "Setting Line Color ==> $grm::AOEM_Hotkeys::clrGND"
-
-                #set the color
-                setLineColor $grm::AOEM_Hotkeys::clrGND
-            }
-        }
-
-        #Select the original objects to return to the users original state
-        onlyselectByID $lSelObjs
+        #set the color to all selected nets at once
+        setLineColor $grm::AOEM_Hotkeys::clrGND
     }
 
     # ----------------------------------------------------------------------------------
     # Set the selection as a High Speed Net
     # ----------------------------------------------------------------------------------
     proc setNetColorHS {} {
-        #Grab a list of all objects selected
-        set lSelObjs [getSel]
+        #Grab a list of all unique nets selected
+        set lNets [getUniqueValidNets [getSel]]
 
-        #Loop through and set all nets to the power color
-        foreach objID $lSelObjs {
-            #only set the color if the selection is a net
-            if { [grm::filter::isWire $objID] } {
-                #Select the object
-                onlyselectByID $objID
+        #select only the nets
+        onlyselectByID $lNets
 
-                #log the action
-                puts "Setting Line Color ==> $grm::AOEM_Hotkeys::clrHS"
-
-                #set the color
-                setLineColor $grm::AOEM_Hotkeys::clrHS
-            }
-        }
-
-        #Select the original objects to return to the users original state
-        onlyselectByID $lSelObjs
+        #set the color to all selected nets at once
+        setLineColor $grm::AOEM_Hotkeys::clrHS
     }
 
     # ----------------------------------------------------------------------------------
     # Set the selection as a Low Speed Net
     # ----------------------------------------------------------------------------------
     proc setNetColorLS {} {
-        #Grab a list of all objects selected
-        set lSelObjs [getSel]
+        #Grab a list of all unique nets selected
+        set lNets [getUniqueValidNets [getSel]]
 
-        #Loop through and set all nets to the power color
-        foreach objID $lSelObjs {
-            #only set the color if the selection is a net
-            if { [grm::filter::isWire $objID] } {
-                #Select the object
-                onlyselectByID $objID
+        #select only the nets
+        onlyselectByID $lNets
 
-                #log the action
-                puts "Setting Line Color ==> $grm::AOEM_Hotkeys::clrLS"
-
-                #set the color
-                setLineColor $grm::AOEM_Hotkeys::clrLS
-            }
-        }
-
-        #Select the original objects to return to the users original state
-        onlyselectByID $lSelObjs
+        #set the color to all selected nets at once
+        setLineColor $grm::AOEM_Hotkeys::clrLS
     }
 
     # ----------------------------------------------------------------------------------
@@ -283,6 +236,181 @@ namespace eval grm::AOEM_Hotkeys {
     proc addNCtoCursor {} {
         addComponent standard "garmin_nc" "sym_1" GARMIN_NC -n 1
     }
+
+# ----------------------------------------------------------------------------------
+    # Procedure to toggle the DNU tag on/off for the passed list of objectIDs
+    #
+    #   lobjIDs - list of db IDs of objects/components that the toggle script should process
+    #   optional bForceDNU - boolean flag as follows:
+    #       0 = Script will determine how to apply (or remove) DNU based on the list of object IDs (see below)
+    #       1 = Script will only apply DNU but will not remove DNU from anything
+    #
+    #   Automatic DNU application follows this logic:
+    #       If all object IDs passed are currently set to DNU, then the script will remove DNU from all of them
+    #       Otherwise, all object IDs passed will be set to DNU
+    # ----------------------------------------------------------------------------------
+    proc toggleDNU { lobjIDs {bForceDNU 0} } {
+        #keep a cache of the current page, in case we navigate away - we'll return here once we're done
+        set ogPageSpath [sch::dbGetActivePageSpath]
+
+        #Unselect all objects to prevent applying changes to unintentded items
+        unselectAll
+
+        #start by cleaning up any stray X lines that the user might have selected
+        foreach strayLine $lobjIDs {
+            if {[sch::dbIsValid $strayLine]} {
+                remStrayXlines $strayLine
+            }
+        }
+
+        #since we may have deleted some dbIDs above, let's create a clean list of only valid objectIDs
+        set lobjIDs [getUniqueValidIDs $lobjIDs]
+
+        #next, see if any remaining X lines are selected, and replace them with the component behind them
+        #   this is done in case the user accidentally selected the X line when running the script,
+        #   since the X lines are set to "front" visually and can be easy to grab on smaller components
+        set lobjIDs [getUniqueValidComponents $lobjIDs]
+
+        #collect a list of unique refdes's based on the now unique list of component IDs - helps us avoid duplicating efforts for multi-gate components
+        set lRefDes [getUniqueRefDesByIDs $lobjIDs]
+
+        #get a list of all Spaths for each instance/gate of all the provided refdes
+        set lCompSpaths []
+        foreach refDes $lRefDes { lappend lCompSpaths [getSpathListOfComponentSafe $refDes] }
+
+        #remove all brackets applied within the compiled list, so that it can be treated as a single level list
+        set lCompSpaths [string map {\{ "" \} ""} $lCompSpaths]
+        
+        #check how to proceed on DNU application or removal
+        if {$bForceDNU} {
+            #force the setting of DNU to the selected components
+            set bApplyDNU 1
+        } else {
+            #check if we should be applying or removing DNU from all components
+            set bApplyDNU [checkForApplyingDNU $lCompSpaths]
+        }
+
+        #get a list of all locations for the instances/gates that we'll be updating, organized by page to minimize page transitions
+        #   {{page1 {x1 y1} {x2 y2} {x3 y3} ... } {page2 {x1 y1} ...} ...}
+        set lInstanceLocationsByPage [getInstanceLocationsByPage $lCompSpaths]
+
+        #loop through all instance locations, one page at a time, selecting each desired component on that page
+        foreach lPageInstanceCollection $lInstanceLocationsByPage {
+            #pageSpath is the first index
+            set pageSpath [lindex $lPageInstanceCollection 0]
+
+            #all remaining indeces are {x y} coordinate pairs for gates/instances on this page
+            for {set idx 1} {$idx < [llength $lPageInstanceCollection]} {incr idx} {
+                #get the object ID of the component at these coordinates
+                set objID [getIDbyLocation $pageSpath [lindex $lPageInstanceCollection $idx]]
+
+                #handle the application or removal of the DNU for this object
+                if { $bApplyDNU } {
+                    addDNU $objID
+                } else {
+                    remDNU $objID
+                }
+            }
+        }
+
+        #See if we need to return to the original page
+        if {$ogPageSpath != [sch::dbGetActivePageSpath]} {openItem $ogPageSpath SCH PAGE}
+
+        #Select the original components
+        onlyselectByID $lobjIDs
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to toggle the DNU tag on/off for the selected components
+    # ----------------------------------------------------------------------------------
+    proc toggleDNUselection {} {
+        toggleDNU [getSel]
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to scan the selected page for components set to DNU and ensure they all have the X visualization applied
+    # ----------------------------------------------------------------------------------
+    proc addXtoDNU_page { pgID } {
+        #Grab a list of all items on the page
+        set lPgObjs [sch::dbGetPageItems $pgID]
+
+        #prepare a list to track components that we want to process
+        set lObjs {}
+
+        #loop through all items on the page to create a list only of components that have BOM set to DNU, but don't currently have an X visualization
+        foreach objID $lPgObjs {
+            #while looping through all items, go ahead and clean up any stray X lines
+            if {[sch::dbIsValid $objID]} {
+                remStrayXlines $objID
+            }
+
+            #only perform the check if the item is a non testpoint component that has BOM set to DNU but no X visualization
+            if {[isBOMComponent $objID] && [checkForDNUbyID $objID] && [llength [getXlinesFromComponentID $objID]] == 0 && [sch::dbIsValid $objID]} {
+                #add to the running list
+                lappend lObjs $objID
+            }
+        }
+
+        #pass the list of objects to the toggle DNU script, but force that it applies DNU
+        toggleDNU $lObjs 1
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to scan the current page for components set to DNU and ensure they all have the X visualization applied
+    # ----------------------------------------------------------------------------------
+    proc addXtoDNU_currentPage {} {
+        addXtoDNU_page  [ sch::dbGetActivePage ]
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to scan all pages in the design set to DNU and ensure they all have the X visualization applied
+    # ----------------------------------------------------------------------------------
+    proc addXtoDNU_allPages {} {
+        #cache the current page to return to once we're finished
+        set curPageSpath [sch::dbGetActivePageSpath]
+
+        #start at the first page
+        sch::firstPage
+
+        #pass each page to the handling script until we're done
+        while (1) {
+            #handle the current page
+            addXtoDNU_currentPage
+
+            #loop to the next page, unless we're at the end of the design
+            if {[sch::nextPage] != 0} {break}
+        }
+
+        #return to the original page
+        openItem $curPageSpath SCH PAGE
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to return a unique list of only valid nets from the passed list of objects
+    # ----------------------------------------------------------------------------------
+    proc getUniqueValidNets { lobjIDs } {
+        #create a temporary list to keep track of only the nets
+        set validNets {}
+        foreach objID $lobjIDs {
+            if {[grm::filter::isWire $objID] && [sch::dbIsValid $objID] && [lsearch -exact $validNets $objID] < 0} {lappend validNets $objID}
+        }
+        return $validNets
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Boolean check to determine if the objectID provided is a line object
+    # ----------------------------------------------------------------------------------
+    proc isLine { objID } {
+        return [expr [sch::dbGetType $objID] == $::sch::DBTLine ? 1 : 0]
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Boolean check to determine if the objectID provided is a component for BOM management (component, not a testpoint, not a netshort)
+    # ----------------------------------------------------------------------------------
+    proc isBOMComponent { objID } {
+        return [expr [grm::filter::isComponent $objID] && ![grm::filter::isTestpoint $objID] && ![grm::filter::isNetShort $objID]]
+    }
+
 
     # ----------------------------------------------------------------------------------
     # Apply DNU to the BOM property on an object (if it doesn't exist), and ensure the BOM property is not displayed
@@ -352,122 +480,228 @@ namespace eval grm::AOEM_Hotkeys {
     }
 
     # ----------------------------------------------------------------------------------
-    # Boolean check to determine if the objectID provided contains a visualization "x" over it
+    # Check to determine if the objectID provided is a component that contains a visualization "x" over it
+    #   Any X lines detected to be over this objectID are returned to the calling function in a list
     # ----------------------------------------------------------------------------------
-    proc getDNUxLines { objID } {
-        #To be considered "found", we must find 2 line objects with the following properties:
-        #   - TopLeft -> BottomRight locations must exactly match the objID passed
-        #   - BottomLeft -> TopRight locations must exaclty match the objID passed
+    proc getXlinesFromComponentID { objID } {
+        if {[isBOMComponent $objID]} {
+            #To be considered "found", we must find line objects with the same outer dimensions as the component
 
-        #get the bounding box of the passed object for use in checking line coordinates
-        set compLeft [getCompLeftByID $objID]
-        set compTop [getCompTopByID $objID]
-        set compRight [getCompRightByID $objID]
-        set compBot [getCompBotByID $objID]
+            #return a list of lines that match the component's bounding box
+            return [getMatchingBBoxItemsByID $objID grm::AOEM_Hotkeys::isLine]
+        }
+    }
 
-        #get the bounding box (db units) for use in getting a list of all components within its bounding box
-        set compBox [sch::dbGetShapeBBox $objID]
+    # ----------------------------------------------------------------------------------
+    # Check to determine if the passed line objectID contains a component that exactly matches its bounding box
+    #   Any component(s) detected to match the line's bounding box are returned to the calling function in a list
+    # ----------------------------------------------------------------------------------
+    proc getComponentsFromXlineID { objID } {
+        if {[isLine $objID]} {
+            #To be considered "found", we must find a component with the same exact outer dimensions as the component
+
+            #return a list of components that match the lines's bounding box
+            return [getMatchingBBoxItemsByID $objID [list isBOMComponent]]
+        }
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Check to determine if the passed line objectID contains X lines that exactly matches its bounding box
+    #   Any lines(s) detected to match the line's bounding box are returned to the calling function in a list
+    #
+    #   Note: this list will ALWAYS return at least one ID (the line itself) since both the passing and checking types are the same
+    # ----------------------------------------------------------------------------------
+    proc getXlinesFromLineID { objID } {
+        if {[isLine $objID]} {
+            #To be considered "found", we must find lines with the same exact outer dimensions as the component
+
+            #return a list of lines that match the lines's bounding box
+            return [getMatchingBBoxItemsByID $objID [list grm::AOEM_Hotkeys::isLine]]
+        }
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to return a list of objects that have an identical bounding box to the passed objID
+    #   objID can be a component or any shape item type
+    #   lMatchingTests is a list of user-provided procedures that will all be a collective boolean AND logic check for a valid matching type
+    #       Note: all matching tests must take a single object ID as an input parameter and return boolean 1 for a match and 0 for failure
+    #       Note: if a user wishes to provide any logic inverses for these tests, simply pass the procedure name starting with !
+    #       Note: if this parameter is not provided, then all valid object IDs found with a matching bbox will be returned
+    #       
+    # Example of possible scenarios are below:
+    #   { objID {grm::AOEM_Hotkeys::isLine} {grm::filter::isComponent !grm::filter::isTestpoint}}
+    #
+    #       This will  will do the following:
+    #           Grab the outer dimensions / bounding box of the objID
+    #           Select all objects inside the bounding box that match the following boolean logic:
+    #               if {[grm::filter::isComponent $bboxObjID] && ![grm::filter::isTestpoint $bboxObjID]}
+    #
+    #   
+    # ----------------------------------------------------------------------------------
+    proc getMatchingBBoxItemsByID { objID {lMatchingTests "sch::dbIsValid"} } {
+
+        #get the primary object's bounding box
+        set objIDbox [userGetShapeBBoxByIDdbUnits $objID]
 
         #get a list of items within this bounding box
-        set lBBoxObjs [sch::dbGetItemsInBBox [sch::dbGetPageOfObject $objID] $compBox]        
-        set lXlines []
+        set lBBoxObjs [sch::dbGetItemsInBBox [sch::dbGetPageOfObject $objID] $objIDbox]
 
-        #loop through all selected items and see if we can find a pair of lines that meet the criteria above
-        foreach bboxObj $lBBoxObjs {
-            if {[isLine $bboxObj]} {
+        #prepare a list to store identified X lines in
+        set lMatches {}
 
-                #get bounds of this line
-                set lineLeft [getLineLeftByID $bboxObj]
-                set lineTop [getLineTopByID $bboxObj]
-                set lineRight [getLineRightByID $bboxObj]
-                set lineBot [getLineBotByID $bboxObj]
+        #loop through all found items and look for any of the matching types
+        foreach bboxObjID $lBBoxObjs {
+            #start the boolean test string
+            set bTestString ""
 
-                #if the line is exactly diagonal through the component, the outer bounding boxes should exactly match
-                if {$lineLeft == $compLeft && $lineTop == $compTop && $lineRight == $compRight && $lineBot == $compBot} {
-                    lappend lXlines $bboxObj
+            #set some variables to keep track of how many logical tests there are
+            set testIDX 1
+            set testLength [llength $lMatchingTests]
+
+            #build up the logical test string based on each of the provided procedures
+            foreach matchingTest $lMatchingTests {
+                #start with the logical bracket
+                set bTest "\["
+
+                #check for inverted logic on this test
+                if {[string index $matchingTest 0] == "!"} {
+                    #start the logical test with inversion
+                    set bTest "!\["
+
+                    #remove the ! from the procedure name before proceeding
+                    set matchingTest [string trimleft $matchingTest "!"]
+                }
+
+                #add the procedure name, a space, the passing object ID, and the closing bracket
+                append bTest "$matchingTest $bboxObjID\]"
+
+                #see if we're at the end of the boolean tests, or if we need to add a logical AND for the next test
+                if {$testIDX < $testLength} {
+                    #prepare for the next logical test
+                    incr testIDX
+                    append bTest " && "
+                }
+
+                #add this boolean test to the overall boolean test string
+                append bTestString $bTest
+            }
+
+            #now that we have the boolean tests completed, perform the check to see if this item type matches
+            if {[expr $bTestString]} {
+                #get bounds of this object
+                set bboxObjbox [userGetShapeBBoxByIDdbUnits $bboxObjID]
+
+                #see if the bounds match
+                if {$objIDbox == $bboxObjbox} {
+                    lappend lMatches $bboxObjID
                 }
             }
         }
 
         # return any matching X lines
-        return $lXlines
+        return $lMatches
     }
 
     # ----------------------------------------------------------------------------------
-    # Boolean check to determine if the objectID provided is a line object
+    # Procedure to return a pair of X/Y coordinates (in db Units) for the Top Left and Bottom Right of the shapes bounding box
+    #   Safely supports both components and shapes as passed object IDs
     # ----------------------------------------------------------------------------------
-    proc isLine { objID } {
-        return [expr [sch::dbGetType $objID] == $::sch::DBTLine ? 1 : 0]
+    proc userGetShapeBBoxByIDdbUnits { objID } {
+        #start by getting the coordinates
+        set topLeftUserUnits [list [getLeftByIDuserUnits $objID] [getTopByIDuserUnits $objID]]
+        set botRightUserUnits [list [getRightByIDuserUnits $objID] [getBotByIDuserUnits $objID]]
+
+        #verify there were valid coordinates before calling conversion to avoid any errors
+        if {[llength $topLeftUserUnits] > 0 && [llength $botRightUserUnits] > 0} {
+            return [list [sch::dbConvertToDBUnits $topLeftUserUnits] [sch::dbConvertToDBUnits $botRightUserUnits]]
+        }
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to toggle the DNU tag on/off for the passed list of objectIDs
-    #   In case 1 component is selected, the BOM tag will be set to the opposite of its previous sate.
-    #   In case > 1 component is selected, the BOM tag will be applied to all components equally with the following logic:
-    #       If all components have the DNU BOM tag already, then all DNU tags will be removed
-    #       Else - all components will be configured with DNU BOM tag
-    #
-    #   Example: 1 component is selected that already has BOM = DNU
-    #       BOM attribute set to DNU will be deleted
-    #
-    #   Example: 3 components are selected where 2 have BOM = DNU while the other doesn't have a DNU BOM tag at all
-    #       All components will be set to DNU
-    #   
-    #   Example: 3 components are selected where all 3 have BOM = DNU
-    #       BOM attribute will be removed from all selected components
+    # Procedure to check if the passed object ID is part of an X line, that is no longer over a component
+    #   If this is found to be the case - this object (X line) and any partners (with same bounding box) will be deleted
     # ----------------------------------------------------------------------------------
-    proc toggleDNU { lobjIDs } {
-        #keep a cache of the current page, in case we navigate away - we'll return here once we're done
-        set ogPageSpath [sch::dbGetActivePageSpath]
+    proc remStrayXlines { objID } {
+        #start by checking if the provided component is even a line
+        if {[isLine $objID]} {
 
-        #Unselect all objects to prevent applying changes to unintentded items
-        unselectAll
+            #get a list of all components (if any) within a bounding box defined by the line's bounding box
+            set lbboxComps [getComponentsFromXlineID $objID]
 
-        #collect a list of unique refdes's based on the provided items - helps us avoid duplicating efforts for multi-gate components
-        set lRefDes [getUniqueRefDesByIDs $lobjIDs]
+            #get a list of all lines (if any) within a bounding box defined by the line's bounding box
+            set lbboxLines [getXlinesFromLineID $objID]
+            
+            #prepare a list to keep track of any lines that we'll be removing
+            set lRemovedLines {}
 
-        #get a list of all Spaths for each instance/gate of all the provided refdes
-        set lCompSpaths []
-        foreach refDes $lRefDes { lappend lCompSpaths [getSpathListOfComponentSafe $refDes] }
+            #to be considered a "stray X line", it must have 0 components found and at least 2 lines found - all with the same outer dimensions
+            if {[llength $lbboxComps] == 0 && [llength $lbboxLines] > 1} {
+                set lRemovedLines $lbboxLines
+            } else {
+                #no stray lines found
+                return
+            }
 
-        #remove all brackets applied within the compiled list, so that it can be treated as a single level list
-        set lCompSpaths [string map {\{ "" \} ""} $lCompSpaths]
-        
-        #check if we should be applying or removing DNU from all components
-        set bApplyDNU [checkForApplyingDNU $lCompSpaths]
+            #loop through each stray line id and delete them
+            foreach lineID $lRemovedLines {
+                #make one last sanity check that this is a valid line (shouldn't be possible to have added something else, but who says engineers aren't careful)
+                if {[isLine $lineID] && [sch::dbIsValid $lineID]} {
+                    #select only this item and delete it
+                    onlyselectByID $lineID
+                    delete
+                }
+            }
 
-        #get a list of all locations for the instances/gates that we'll be updating, organized by page to minimize page transitions
-        #   {{page1 {x1 y1} {x2 y2} {x3 y3} ... } {page2 {x1 y1} ...} ...}
-        set lInstanceLocationsByPage [getInstanceLocationsByPage $lCompSpaths]
+            #unselect everything
+            unselectAll
 
-        #loop through all instance locations, one page at a time, selecting each desired component on that page
-        foreach lPageInstanceCollection $lInstanceLocationsByPage {
-            #pageSpath is the first index
-            set pageSpath [lindex $lPageInstanceCollection 0]
+            #return the list of deleted lines
+            return $lRemovedLines
+        }
+    }
 
-            #all remaining indeces are {x y} coordinate pairs for gates/instances on this page
-            for {set idx 1} {$idx < [llength $lPageInstanceCollection]} {incr idx} {
-                #get the object ID of the component at these coordinates
-                set objID [getIDbyLocation $pageSpath [lindex $lPageInstanceCollection $idx]]
+    # ----------------------------------------------------------------------------------
+    # Procedure to ensure only unique (listed only once) and valid components are selected
+    #   In case lines are passed - this procedure will attempt to replace them with any found
+    #   components "behind" them, in case the user accidentally selected a line instead of the component
+    # ----------------------------------------------------------------------------------
+    proc getUniqueValidComponents { lobjIDs } {
+        #setup a temporary list to keep track of only components
+        set tempCompList {}
 
-                #handle the application or removal of the DNU for this object
-                if { $bApplyDNU } {
-                    addDNU $objID
-                } else {
-                    remDNU $objID
+        #loop through the list of all objects passed
+        foreach objID $lobjIDs {
+            #for now, we don't care about uniqueness - we can replace our list later with removing duplicates
+            if {[isBOMComponent $objID]} {
+                #add the component to the temp list
+                lappend tempCompList $objID
+            } elseif {[isLine $objID]} {
+                #find any number of components that match this line's bounding box
+                set lbboxComponents [getComponentsFromXlineID $objID]
+
+                #it should be impossible for this to be > 1, but why not be safe
+                foreach compID $lbboxComponents {
+                    #add these to the running list
+                    lappend tempCompList $compID
                 }
             }
         }
 
-        #See if we need to return to the original page
-        if {$ogPageSpath != [sch::dbGetActivePageSpath]} {openItem $ogPageSpath SCH PAGE}
+        #now that we have a list of only non-testpoint components, let's make sure it's valid and each ID is only listed once
+        return [getUniqueValidIDs $tempCompList]
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to toggle the DNU tag on/off for the selected components
+    # Procedure to take in a list of database IDs and return a list that contains only valid IDs
+    #   this also will ensure each ID only exists once in the list
     # ----------------------------------------------------------------------------------
-    proc toggleDNUselection {} {
-        toggleDNU [getSel]
+    proc getUniqueValidIDs { lobjIDs } {
+        #loop through the provide list, and collect all IDs that are currently valid
+        set validIDs {}
+        foreach objID $lobjIDs {
+            if {[sch::dbIsValid $objID] && [lsearch -exact $validIDs $objID] < 0} {lappend validIDs $objID}
+        }
+        return $validIDs
     }
 
     # ----------------------------------------------------------------------------------
@@ -495,7 +729,7 @@ namespace eval grm::AOEM_Hotkeys {
     # ----------------------------------------------------------------------------------
     proc addDNU { objID } {
         #ensure the passed object ID is a component, but not a testpoint
-        if {[grm::filter::isComponent $objID] && ![grm::filter::isTestpoint $objID]} {
+        if {[isBOMComponent $objID]} {
             #add the DNU BOM tag
             setBOMDNUHidden $objID
 
@@ -511,8 +745,8 @@ namespace eval grm::AOEM_Hotkeys {
     # Procedure to add DNU X Visualization to an object.
     # ----------------------------------------------------------------------------------
     proc addDNUx { objID } {
-        #ensure the passed object ID is a component
-        if {[grm::filter::isComponent $objID] && ![grm::filter::isTestpoint $objID]} {
+        #ensure the passed object ID is a non testpoint component and doesn't already have an X visualization over it
+        if {[isBOMComponent $objID] && [llength [getXlinesFromComponentID $objID]] == 0} {
             #Ensure only the component is selected
             onlyselectByID $objID
 
@@ -522,10 +756,10 @@ namespace eval grm::AOEM_Hotkeys {
             #set the component's line color
             setLineColor $grm::AOEM_Hotkeys::clrDNUcompline
 
-            set compLeft [getCompLeftByID $objID]
-            set compTop [getCompTopByID $objID]
-            set compRight [getCompRightByID $objID]
-            set compBot [getCompBotByID $objID]
+            set compLeft [getLeftByIDuserUnits $objID]
+            set compTop [getTopByIDuserUnits $objID]
+            set compRight [getRightByIDuserUnits $objID]
+            set compBot [getBotByIDuserUnits $objID]
 
             #add the first line (Top Left -> Bottom Right), set its width and color
             addLine $compLeft $compTop $compRight $compBot
@@ -544,7 +778,7 @@ namespace eval grm::AOEM_Hotkeys {
     # ----------------------------------------------------------------------------------
     proc remDNU { objID } {
         #ensure the passed object ID is a component
-        if {[grm::filter::isComponent $objID] && ![grm::filter::isTestpoint $objID]} {
+        if {[isBOMComponent $objID]} {
             #remove BOM property and update fill color as long as it contains DNU currently - otherwise leave it alone
             if { [checkForDNUbyID $objID] } {
                 #Ensure only the component is selected
@@ -574,9 +808,9 @@ namespace eval grm::AOEM_Hotkeys {
     # ----------------------------------------------------------------------------------
     proc remDNUx { objID } {
         #ensure the passed object ID is a component
-        if {[grm::filter::isComponent $objID] && ![grm::filter::isTestpoint $objID]} {
+        if {[isBOMComponent $objID]} {
             #check if there are any X lines to remove
-            set lXlines [getDNUxLines $objID]
+            set lXlines [getXlinesFromComponentID $objID]
 
             #only proceed if we found xLines
             if { [llength $lXlines] > 0 } {
@@ -593,9 +827,57 @@ namespace eval grm::AOEM_Hotkeys {
     }
 
     # ----------------------------------------------------------------------------------
+    # Procedure to return the coordinates (User Units, not dbUnits) of the left boundary of the component or line
+    #   Safely handles components or lines as passed object ID
+    # ----------------------------------------------------------------------------------
+    proc getLeftByIDuserUnits { objID } {
+        if {[grm::filter::isComponent $objID]} {
+            return [getCompLeftByIDuserUnits $objID]
+        } else {
+            return [getShapeLeftByIDuserUnits $objID]
+        }
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to return the coordinates (User Units, not dbUnits) of the top boundary of the component or line
+    #   Safely handles components or lines as passed object ID
+    # ----------------------------------------------------------------------------------
+    proc getTopByIDuserUnits { objID } {
+        if {[grm::filter::isComponent $objID]} {
+            return [getCompTopByIDuserUnits $objID]
+        } else {
+            return [getShapeTopByIDuserUnits $objID]
+        }
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to return the coordinates (User Units, not dbUnits) of the right boundary of the component or line
+    #   Safely handles components or lines as passed object ID
+    # ----------------------------------------------------------------------------------
+    proc getRightByIDuserUnits { objID } {
+        if {[grm::filter::isComponent $objID]} {
+            return [getCompRightByIDuserUnits $objID]
+        } else {
+            return [getShapeRightByIDuserUnits $objID]
+        }
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to return the coordinates (User Units, not dbUnits) of the bottom boundary of the component or line
+    #   Safely handles components or lines as passed object ID
+    # ----------------------------------------------------------------------------------
+    proc getBotByIDuserUnits { objID } {
+        if {[grm::filter::isComponent $objID]} {
+            return [getCompBotByIDuserUnits $objID]
+        } else {
+            return [getShapeBotByIDuserUnits $objID]
+        }
+    }
+
+    # ----------------------------------------------------------------------------------
     # Procedure to return the coordinates (User Units, not dbUnits) of the left boundary of the component
     # ----------------------------------------------------------------------------------
-    proc getCompLeftByID { objID } {
+    proc getCompLeftByIDuserUnits { objID } {
         #find the coordinates
         set coordLeft [lindex [sch::dbConvertToUserUnits [lindex [sch::dbGetShapeBBox $objID] 0]] 0]
 
@@ -606,7 +888,7 @@ namespace eval grm::AOEM_Hotkeys {
     # ----------------------------------------------------------------------------------
     # Procedure to return the coordinates (User Units, not dbUnits) of the top boundary of the component
     # ----------------------------------------------------------------------------------
-    proc getCompTopByID { objID } {
+    proc getCompTopByIDuserUnits { objID } {
         #find the coordinates
         set coordTop [lindex [sch::dbConvertToUserUnits [lindex [sch::dbGetShapeBBox $objID] 0]] 1]
 
@@ -617,7 +899,7 @@ namespace eval grm::AOEM_Hotkeys {
     # ----------------------------------------------------------------------------------
     # Procedure to return the coordinates (User Units, not dbUnits) of the right boundary of the component
     # ----------------------------------------------------------------------------------
-    proc getCompRightByID { objID } {
+    proc getCompRightByIDuserUnits { objID } {
         #find the coordinates
         set coordRight [lindex [sch::dbConvertToUserUnits [lindex [sch::dbGetShapeBBox $objID] 1]] 0]
 
@@ -628,7 +910,7 @@ namespace eval grm::AOEM_Hotkeys {
     # ----------------------------------------------------------------------------------
     # Procedure to return the coordinates (User Units, not dbUnits) of the bottom boundary of the component
     # ----------------------------------------------------------------------------------
-    proc getCompBotByID { objID } {
+    proc getCompBotByIDuserUnits { objID } {
         #find the coordinates
         set coordBot [lindex [sch::dbConvertToUserUnits [lindex [sch::dbGetShapeBBox $objID] 1]] 1]
         
@@ -637,16 +919,19 @@ namespace eval grm::AOEM_Hotkeys {
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to return a list of all X coordinates of a line (User Units, not dbUnits)
+    # Procedure to return a list of all X coordinates of a shape (User Units, not dbUnits)
     # ----------------------------------------------------------------------------------
-    proc getLineXpointsByID { objID } {
-        #initially blank list to collect all X coordinates of the line's points
+    proc getShapeXpointsByIDuserUnits { objID } {
+        #initially blank list to collect all X coordinates of the Shape's points
         set lXpoints []
 
-        #only collect coordinate points if it's a line
-        if {[isLine $objID]} {
+        #only collect coordinate points if it's not a component
+        if {![grm::filter::isComponent $objID]} {
             #collect the line's points in database format
             set lDBPoints [sch::dbGetPoints $objID]
+
+            #make sure points were found
+            if {[llength $lDBPoints] == 0} {return}
 
             #loop through all points, convert to User Units, then add them to the lXpoints list
             foreach DBpoint $lDBPoints {
@@ -659,16 +944,19 @@ namespace eval grm::AOEM_Hotkeys {
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to return a list of all Y coordinates of a line (User Units, not dbUnits)
+    # Procedure to return a list of all Y coordinates of a shape (User Units, not dbUnits)
     # ----------------------------------------------------------------------------------
-    proc getLineYpointsByID { objID } {
-        #initially blank list to collect all X coordinates of the line's points
+    proc getShapeYpointsByIDuserUnits { objID } {
+        #initially blank list to collect all X coordinates of the Shape's points
         set lYpoints []
 
-        #only collect coordinate points if it's a line
-        if {[isLine $objID]} {
-            #collect the line's points in database format
+        #only collect coordinate points if it's not a component
+        if {![grm::filter::isComponent $objID]} {
+            #collect the Shapes's points in database format
             set lDBPoints [sch::dbGetPoints $objID]
+
+            #make sure points were found
+            if {[llength $lDBPoints] == 0} {return}
 
             #loop through all points, convert to User Units, then add them to the lXpoints list
             foreach DBpoint $lDBPoints {
@@ -681,67 +969,47 @@ namespace eval grm::AOEM_Hotkeys {
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to return the coordinates (User Units, not dbUnits) of the left boundary of the line
+    # Procedure to return the coordinates (User Units, not dbUnits) of the left boundary of the Shape
     # ----------------------------------------------------------------------------------
-    proc getLineLeftByID { objID } {
-        #Left is the smallest X coordinate in the list of the line's points
-        set lXpoints [getLineXpointsByID $objID]
-        return [::tcl::mathfunc::min {*}$lXpoints]
+    proc getShapeLeftByIDuserUnits { objID } {
+        #Left is the smallest X coordinate in the list of the Shape's points
+        set lXpoints [getShapeXpointsByIDuserUnits $objID]
+
+        #Only return a valid set of points
+        if {[llength $lXpoints] > 0 } {return [::tcl::mathfunc::min {*}$lXpoints]}
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to return the coordinates (User Units, not dbUnits) of the top boundary of the line
+    # Procedure to return the coordinates (User Units, not dbUnits) of the top boundary of the Shape
     # ----------------------------------------------------------------------------------
-    proc getLineTopByID { objID } {
-        #Top is the smallest Y coordinate in the list of the line's points
-        set lYpoints [getLineYpointsByID $objID]
-        return [::tcl::mathfunc::min {*}$lYpoints]
+    proc getShapeTopByIDuserUnits { objID } {
+        #Top is the smallest Y coordinate in the list of the Shape's points
+        set lYpoints [getShapeYpointsByIDuserUnits $objID]
+
+        #Only return a valid set of points
+        if {[llength $lYpoints] > 0 } {return [::tcl::mathfunc::min {*}$lYpoints]}
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to return the coordinates (User Units, not dbUnits) of the right boundary of the line
+    # Procedure to return the coordinates (User Units, not dbUnits) of the right boundary of the Shape
     # ----------------------------------------------------------------------------------
-    proc getLineRightByID { objID } {
-        #Right is the larget X coordinate in the list of the line's points
-        set lXpoints [getLineXpointsByID $objID]
-        return [::tcl::mathfunc::max {*}$lXpoints]
+    proc getShapeRightByIDuserUnits { objID } {
+        #Right is the larget X coordinate in the list of the Shape's points
+        set lXpoints [getShapeXpointsByIDuserUnits $objID]
+
+        #Only return a valid set of points
+        if {[llength $lXpoints] > 0 } {return [::tcl::mathfunc::max {*}$lXpoints]}
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to return the coordinates (User Units, not dbUnits) of the bottom boundary of the line
+    # Procedure to return the coordinates (User Units, not dbUnits) of the bottom boundary of the Shape
     # ----------------------------------------------------------------------------------
-    proc getLineBotByID { objID } {
-        #Bottom is the larget Y coordinate in the list of the line's points
-        set lYpoints [getLineYpointsByID $objID]
-        return [::tcl::mathfunc::max {*}$lYpoints]
-    }
+    proc getShapeBotByIDuserUnits { objID } {
+        #Bottom is the larget Y coordinate in the list of the Shape's points
+        set lYpoints [getShapeYpointsByIDuserUnits $objID]
 
-    proc addXtoDNU_currentPage {} {
-        addXtoDNU_page  [ sch::dbGetActivePage ]
-    }
-
-    # ----------------------------------------------------------------------------------
-    # Procedure to scan the selected page for components set to DNU and ensure they all have the X visualization applied
-    # ----------------------------------------------------------------------------------
-    proc addXtoDNU_page { pgID } {
-        #Grab a list of all items on the page
-        set lPgObjs [sch::dbGetPageItems $pgID]
-
-        #loop through all items on the page
-        foreach objID $lPgObjs {
-            #only perform the check if the item is a non testpoint component
-            if {[grm::filter::isComponent $objID] && ![grm::filter::isTestpoint $objID]} {
-                #check if the item has a DNU BOM tag, but does not already have an X
-                if {[checkForDNUbyID $objID] && [llength [getDNUxLines $objID]] == 0} {
-
-                    #ensure the BOM tag is hidden
-                    setBOMDNUHidden $objID
-
-                    #apply the DNU X
-                    addDNUx $objID
-                }
-            }
-        }
+        #Only return a valid set of points
+        if {[llength $lYpoints] > 0 } {return [::tcl::mathfunc::max {*}$lYpoints]}
     }
 
     # ----------------------------------------------------------------------------------
@@ -761,7 +1029,7 @@ namespace eval grm::AOEM_Hotkeys {
         #loop through each ID
         foreach objID $lobjIDs {
             #only perform the check if the item is a non testpoint component
-            if {[grm::filter::isComponent $objID] && ![grm::filter::isTestpoint $objID]} {
+            if {[isBOMComponent $objID]} {
                 #get the current refdes
                 set refDes [getRefDesByID $objID]
 
@@ -898,6 +1166,11 @@ namespace eval grm::AOEM_Hotkeys {
     # ----------------------------------------------------------------------------------
     variable AOEM_Hotkeys_Menu {
         {"&AOEM Hotkeys" {sch} "Help" {} {
+            {"&DNU Management" {sch} {} {
+                {"Toggle DNU" {} {grm::AOEM_Hotkeys::toggleDNUselection} {}}
+                {"Apply X to all DNU components on the current page" {} {grm::AOEM_Hotkeys::addXtoDNU_currentPage} {}}
+                {"Apply X to all DNU components in the design" {} {grm::AOEM_Hotkeys::addXtoDNU_allPages} {}}
+            }}
             {"&Net Colors" {sch} {} {
                 {"Set Net Color: Power" {} {grm::AOEM_Hotkeys::setNetColorPower} {}}
                 {"Set Net Color: GND" {} {grm::AOEM_Hotkeys::setNetColorGND} {}}
@@ -910,10 +1183,8 @@ namespace eval grm::AOEM_Hotkeys {
                 {"Add GND Symbol" {} {grm::AOEM_Hotkeys::addGenericGNDtoCursor} {}}
                 {"Add GND Net" {} {grm::AOEM_Hotkeys::addGNDtoCursor} {}}
                 {"Add NC Symbol" {} {grm::AOEM_Hotkeys::addNCtoCursor} {}}
-                {"Toggle DNU" {} {grm::AOEM_Hotkeys::toggleDNUselection} {}}
-                {"Apply DNU X to All Symbols on Current Page" {} {grm::AOEM_Hotkeys::addXtoDNU_currentPage} {}}
             }}
-            {"&Utilities" {sch} {} {
+            {"FindPart &Utilities" {sch} {} {
                 {"FindPart: Eng Search" {} {grm::AOEM_Hotkeys::FPENG} {}}
                 {"FindPart: AML Search" {} {grm::AOEM_Hotkeys::FPAML} {}}
             }}
@@ -927,12 +1198,6 @@ namespace eval grm::AOEM_Hotkeys {
         #add the menu items
         grm::menu::addMenuBar $grm::AOEM_Hotkeys::AOEM_Hotkeys_Menu sch
 
-        #add each shortcut/keybinding
-        #   Note: currently disabled, as we'll plan to let each user define their own keybinding, which Cadence cache's in the cpUserShortcuts.txt file
-        #modifyActionShortcut {Set Net Color: Power} {1} {sch}
-        #modifyActionShortcut {Set Net Color: GND} {2} {sch}
-        #modifyActionShortcut {Set Net Color: High Speed} {3} {sch}
-        #modifyActionShortcut {Set Net Color: Low Speed} {4} {sch} 
     }
 }
 
