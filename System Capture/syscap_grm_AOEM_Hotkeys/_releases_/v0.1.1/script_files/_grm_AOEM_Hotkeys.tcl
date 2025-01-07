@@ -5,18 +5,18 @@
 #            Scripts to assist with adding various common functions/keybindings for AOEM
 #
 #   Author: Ryan Klassing / Tyler Dill
-#   Version: v1.1
+#   Version: v0.1.1
 #   Date: 2024/12/10
 #
 #   Release Notes:
-#     ------v1.1------
+#     ------v0.1.1------
 #       Release Date: 
 #           2024/12/10
 #       Description:
 #           Renamed openInFindPart to FPENG to allow consistent naming with other findpart functions
 #           Added new FPAML function to do an AML search in FindPart for the selected component
 #
-#     ------v1.0------
+#     ------v0.1.0------
 #       Release Date: 
 #           2024/08/21
 #       Description:

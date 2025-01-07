@@ -5,11 +5,11 @@
 #            Scripts to assist with adding various common functions/keybindings for AOEM
 #
 #   Author: Ryan Klassing / Tyler Dill
-#   Version: v1.0
+#   Version: v0.1.0
 #   Date: 2024/08/21
 #
 #   Release Notes:
-#     ------v1.0------
+#     ------v0.1.0------
 #       Initial Release
 #/////////////////////////////////////////////////////////////////////////////////
 

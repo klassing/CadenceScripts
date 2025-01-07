@@ -86,46 +86,6 @@ namespace eval grm::AOEM_Hotkeys {
         set clrDEFcompline "#000000"
 
     # ----------------------------------------------------------------------------------
-    # Unselect all objects passed by their ID
-    # ----------------------------------------------------------------------------------
-    proc unselectByID {lobjIDs} {
-        foreach objID $lobjIDs {
-            sch::dbUnselectObjectById $objID $::sch::DBFalse
-        }
-    }
-
-    # ----------------------------------------------------------------------------------
-    # Select all objects passed by their ID
-    # ----------------------------------------------------------------------------------
-    proc selectByID {lobjIDs} {
-        foreach objID $lobjIDs {
-            sch::dbSelectObjectByIdEx $objID $::sch::DBFalse $::sch::DBFalse
-        }
-    }
-
-    # ----------------------------------------------------------------------------------
-    # Unselect everything
-    # ----------------------------------------------------------------------------------
-    proc unselectAll {} {
-        #Grab a list of all objects selected
-        set lSelObjs [getSel]
-
-        #Unselect them all
-        unselectByID $lSelObjs
-    }
-
-    # ----------------------------------------------------------------------------------
-    # Unselect everything except for the passed object IDs
-    # ----------------------------------------------------------------------------------
-    proc onlyselectByID {lobjIDs} {
-        #unselect all items
-        unselectAll
-
-        #Ensure all desired objects are selected
-        selectByID $lobjIDs
-    }
-
-    # ----------------------------------------------------------------------------------
     # Set the selection as a Power Net
     # ----------------------------------------------------------------------------------
     proc setNetColorPower {} {
@@ -230,13 +190,6 @@ namespace eval grm::AOEM_Hotkeys {
         exec cmd.exe /c [string cat "start http://findpart.garmin.com/ngfindPart/executeAMLSearch?strSearch=" [string replace [string replace [sch::dbGetPropNameVal [grm::search::recursiveMatches [getSel] grm::filter::isPartNumberProperty] [sch::dbGetSPathForActiveTab]] 0 12 ""] 12 13 ""]]
     }
 
-    # ----------------------------------------------------------------------------------
-    # Set the selected component to DNU with added visualizations
-    # ----------------------------------------------------------------------------------
-    proc addNCtoCursor {} {
-        addComponent standard "garmin_nc" "sym_1" GARMIN_NC -n 1
-    }
-
 # ----------------------------------------------------------------------------------
     # Procedure to toggle the DNU tag on/off for the passed list of objectIDs
     #
@@ -292,7 +245,7 @@ namespace eval grm::AOEM_Hotkeys {
 
         #get a list of all locations for the instances/gates that we'll be updating, organized by page to minimize page transitions
         #   {{page1 {x1 y1} {x2 y2} {x3 y3} ... } {page2 {x1 y1} ...} ...}
-        set lInstanceLocationsByPage [getInstanceLocationsByPage $lCompSpaths]
+        set lInstanceLocationsByPage [getInstanceLocationsBySpaths $lCompSpaths]
 
         #loop through all instance locations, one page at a time, selecting each desired component on that page
         foreach lPageInstanceCollection $lInstanceLocationsByPage {
@@ -321,7 +274,7 @@ namespace eval grm::AOEM_Hotkeys {
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to toggle the DNU tag on/off for the selected components
+    # Procedure to toggle the DNU BOM tag and X visualization on/off for the selected components
     # ----------------------------------------------------------------------------------
     proc toggleDNUselection {} {
         toggleDNU [getSel]
@@ -383,6 +336,46 @@ namespace eval grm::AOEM_Hotkeys {
 
         #return to the original page
         openItem $curPageSpath SCH PAGE
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Unselect all objects passed by their ID
+    # ----------------------------------------------------------------------------------
+    proc unselectByID {lobjIDs} {
+        foreach objID $lobjIDs {
+            sch::dbUnselectObjectById $objID $::sch::DBFalse
+        }
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Select all objects passed by their ID
+    # ----------------------------------------------------------------------------------
+    proc selectByID {lobjIDs} {
+        foreach objID $lobjIDs {
+            sch::dbSelectObjectByIdEx $objID $::sch::DBFalse $::sch::DBFalse
+        }
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Unselect everything
+    # ----------------------------------------------------------------------------------
+    proc unselectAll {} {
+        #Grab a list of all objects selected
+        set lSelObjs [getSel]
+
+        #Unselect them all
+        unselectByID $lSelObjs
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Unselect everything except for the passed object IDs
+    # ----------------------------------------------------------------------------------
+    proc onlyselectByID {lobjIDs} {
+        #unselect all items
+        unselectAll
+
+        #Ensure all desired objects are selected
+        selectByID $lobjIDs
     }
 
     # ----------------------------------------------------------------------------------
@@ -526,7 +519,7 @@ namespace eval grm::AOEM_Hotkeys {
     #   lMatchingTests is a list of user-provided procedures that will all be a collective boolean AND logic check for a valid matching type
     #       Note: all matching tests must take a single object ID as an input parameter and return boolean 1 for a match and 0 for failure
     #       Note: if a user wishes to provide any logic inverses for these tests, simply pass the procedure name starting with !
-    #       Note: if this parameter is not provided, then all valid object IDs found with a matching bbox will be returned
+    #       Note: if this parameter is omitted entirely, then all valid object IDs found with a matching bbox will be returned
     #       
     # Example of possible scenarios are below:
     #   { objID {grm::AOEM_Hotkeys::isLine} {grm::filter::isComponent !grm::filter::isTestpoint}}
@@ -827,8 +820,7 @@ namespace eval grm::AOEM_Hotkeys {
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to return the coordinates (User Units, not dbUnits) of the left boundary of the component or line
-    #   Safely handles components or lines as passed object ID
+    # Procedure to return the coordinates (User Units, not dbUnits) of the left boundary of the component or shape
     # ----------------------------------------------------------------------------------
     proc getLeftByIDuserUnits { objID } {
         if {[grm::filter::isComponent $objID]} {
@@ -839,8 +831,7 @@ namespace eval grm::AOEM_Hotkeys {
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to return the coordinates (User Units, not dbUnits) of the top boundary of the component or line
-    #   Safely handles components or lines as passed object ID
+    # Procedure to return the coordinates (User Units, not dbUnits) of the top boundary of the component or shape
     # ----------------------------------------------------------------------------------
     proc getTopByIDuserUnits { objID } {
         if {[grm::filter::isComponent $objID]} {
@@ -851,8 +842,7 @@ namespace eval grm::AOEM_Hotkeys {
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to return the coordinates (User Units, not dbUnits) of the right boundary of the component or line
-    #   Safely handles components or lines as passed object ID
+    # Procedure to return the coordinates (User Units, not dbUnits) of the right boundary of the component or shape
     # ----------------------------------------------------------------------------------
     proc getRightByIDuserUnits { objID } {
         if {[grm::filter::isComponent $objID]} {
@@ -863,8 +853,7 @@ namespace eval grm::AOEM_Hotkeys {
     }
 
     # ----------------------------------------------------------------------------------
-    # Procedure to return the coordinates (User Units, not dbUnits) of the bottom boundary of the component or line
-    #   Safely handles components or lines as passed object ID
+    # Procedure to return the coordinates (User Units, not dbUnits) of the bottom boundary of the component or shape
     # ----------------------------------------------------------------------------------
     proc getBotByIDuserUnits { objID } {
         if {[grm::filter::isComponent $objID]} {
@@ -1056,8 +1045,10 @@ namespace eval grm::AOEM_Hotkeys {
         return [sdaConn::getSpathListOfComponent $refDes [sch::dbGetRootDesignName]]
     }
 
+        
+
     # ----------------------------------------------------------------------------------
-    # Procedure to return a list of locations <pageSpath x y> for all provided instance/gate Spaths
+    # Procedure to return a list of locations <pageSpath x y> for all provided reference designators
     #   the returned list will be organized by pageSpaths, to minimize page transitions needed in calling procedures
     #   { {pageSpath1 {x1 y1} {x2 y2} {x3 y3} ...} {pageSpath2 {x1 y1} {x2 y2} ...} {pageSpath3 ... } }
     #   
@@ -1066,13 +1057,36 @@ namespace eval grm::AOEM_Hotkeys {
     #       x is the x coordinate of the center of the given symbol instance/gate
     #       y is the y coordinate of the center of the given symbol instance/gate
     # ----------------------------------------------------------------------------------
-    proc getInstanceLocationsByPage { lCompSpaths } {
+    proc getInstanceLocationsByRefDes { lRefDes } {
+        #get a list of all Spaths for each instance/gate of all the provided refdes
+        set lCompSpaths []
+        foreach refDes $lRefDes { lappend lCompSpaths [getSpathListOfComponentSafe $refDes] }
+
+        #remove all brackets applied within the compiled list, so that it can be treated as a single level list
+        set lCompSpaths [string map {\{ "" \} ""} $lCompSpaths]
+
+        #get a list of all locations for the instances/gates that we'll be updating, organized by page to minimize page transitions
+        #   {{page1 {x1 y1} {x2 y2} {x3 y3} ... } {page2 {x1 y1} ...} ...}
+        return [getInstanceLocationsBySpaths $lCompSpaths]
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to return a list of locations <pageSpath x y> for all provided component Spaths
+    #   the returned list will be organized by pageSpaths, to minimize page transitions needed in calling procedures
+    #   { {pageSpath1 {x1 y1} {x2 y2} {x3 y3} ...} {pageSpath2 {x1 y1} {x2 y2} ...} {pageSpath3 ... } }
+    #   
+    #   where:
+    #       pageSpath is the Spath for the page of the given symbol instance/gate
+    #       x is the x coordinate of the center of the given symbol instance/gate
+    #       y is the y coordinate of the center of the given symbol instance/gate
+    # ----------------------------------------------------------------------------------
+    proc getInstanceLocationsBySpaths { lCompSpaths } {
 
         #pepare a couple lists to collect and organize the instance locations
         set lInstanceLocations {}
         set lInstanceLocationsByPage {}
 
-        #prepare a couple list to collect and organize just the pageSpaths in, for helping us organize the instance lists later on
+        #prepare a list to collect and organize just the pageSpaths in, for helping us organize the instance lists later on
         set lPageSpaths {}
 
         #loop through each instance

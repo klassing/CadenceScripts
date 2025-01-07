@@ -1,7 +1,7 @@
 # CadenceScripts
 
 ## Description
-This repository is a collection of scripts for various Cadence tools, with the intent of improving users workflows.  Further information for each tool's scripts is provided in each sub directory.
+This repository is a collection of scripts for use with the Cadence System Capture tool.  Detailed instructions for installing and using the scripts are included in each script's subdirectory.
 
 ## Author(s)
 - Author(s): Ryan Klassing
