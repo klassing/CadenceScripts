@@ -13,7 +13,8 @@
 #       Release Date: 
 #           2024/12/26
 #       Description:
-#           Added functionality to the addXtoDNU_page {} to also check the "NOT_USED" property to be considered DNU (in addition to the "BOM" property already implemented)
+#           Added functionality to allow the script to check the BOM and NOT_USED properties when getting/setting DNU status on components
+#               this configuration can be set externally if needed.  Default configuration is for using both BOM and NOT_USED, but can be set to either BOM or NOT_USED if desired
 #
 #     ------v1.0.0------
 #       Release Date: 
@@ -90,6 +91,12 @@ namespace eval grm::AOEM_Hotkeys {
 
         #define default shape fill color (for when we clear the DNU visualization)
         set clrDEFcompline "#000000"
+
+        #define some namespace configuration parameter to allow the script to decide whether to use NOT_USED, BOM, or both for the DNU logic
+        proc const_DNU_NOT_USED {} {return 0}
+        proc const_DNU_BOM {} {return 1}
+        proc const_DNU_BOTH {} {return 2}
+        set flag_DNU_config [const_DNU_BOTH]
 
     # ----------------------------------------------------------------------------------
     # Set the selection as a Power Net
@@ -410,55 +417,6 @@ namespace eval grm::AOEM_Hotkeys {
         return [expr [grm::filter::isComponent $objID] && ![grm::filter::isTestpoint $objID] && ![grm::filter::isNetShort $objID]]
     }
 
-
-    # ----------------------------------------------------------------------------------
-    # Apply DNU to the BOM property on an object (if it doesn't exist), and ensure the BOM property is not displayed
-    # ----------------------------------------------------------------------------------
-    proc setBOMDNUHidden { objID } {
-        #setup some variables to support calling the property modifications
-        set propertyName BOM
-        set propertyValue DNU
-        set propertyDisplay nodisp
-        set command addProp
-
-        #grab data regarding active page and page of the object
-        set currentPage [sch::dbGetActivePage]
-        set currentPageSpath [sch::dbGetActivePageSpath]
-        set bReturnPage 0
-
-        #property modification will only be successful if the object's page is active
-        #check if the object's page is currently active
-        if {[sch::dbGetPageOfObject $objID] != $currentPage} {
-            #set a flag to remind us to revert the page when we're done
-            set bReturnPage 1
-
-            #ensure nothing else is selected
-            unselectAll
-
-            #Activate the object's page by selecting while setting navigation to true
-            sch::dbSelectObjectByIdEx $objID $::sch::DBTrue $::sch::DBFalse
-        } else {
-            #ensure only this component is selected
-            onlyselectByID $objID
-        }
-
-        #remove any existing NOT_USED tag from legacy designs
-        deleteProp -name NOT_USED
-
-        #remove any existing BOM tag in case the user currently has this component applied to a BOM
-        deleteProp -name $propertyName
-
-        #Add the BOM property back and set to DNU the property modification
-        addProp -name $propertyName -value $propertyValue -display $propertyDisplay
-
-        #unselect all components
-        unselectAll
-
-        #return to the original page if necessary
-        if {$bReturnPage} { openItem $currentPageSpath SCH PAGE }
-
-    }
-
     # ----------------------------------------------------------------------------------
     # Boolean check to determine if the objectID provided contains a BOM attribute set to DNU
     # ----------------------------------------------------------------------------------
@@ -470,11 +428,17 @@ namespace eval grm::AOEM_Hotkeys {
     # Boolean check to determine if the component provided contains a BOM attribute set to DNU
     # ----------------------------------------------------------------------------------
     proc checkForDNUbySpath { compSpath } {
-        if {"DNU" == [sch::dbGetPropertyValueFromSPath $compSpath {BOM}] || "DNU" == [sch::dbGetPropertyValueFromSPath $compSpath {NOT_USED}]} {
-            return 1
-        } else { 
-            return 0
-        } 
+        
+        #check for DNU based on the configuration flag
+        if {$grm::AOEM_Hotkeys::flag_DNU_config == [const_DNU_NOT_USED]} {
+            if {"DNU" == [sch::dbGetPropertyValueFromSPath $compSpath {NOT_USED}]} { return 1 }
+        } elseif {$grm::AOEM_Hotkeys::flag_DNU_config == [const_DNU_BOM]} {
+            if {"DNU" == [sch::dbGetPropertyValueFromSPath $compSpath {BOM}]} { return 1 }
+        } elseif {$grm::AOEM_Hotkeys::flag_DNU_config == [const_DNU_BOTH]} {
+            if {"DNU" == [sch::dbGetPropertyValueFromSPath $compSpath {BOM}] || "DNU" == [sch::dbGetPropertyValueFromSPath $compSpath {NOT_USED}]} { return 1 }
+        }
+
+        return 0
     }
 
     # ----------------------------------------------------------------------------------
@@ -728,8 +692,11 @@ namespace eval grm::AOEM_Hotkeys {
     proc addDNU { objID } {
         #ensure the passed object ID is a component, but not a testpoint
         if {[isBOMComponent $objID]} {
-            #add the DNU BOM tag
-            setBOMDNUHidden $objID
+            #add the DNU BOM configuration (NOT_USED or BOM) based on the global flag's desired config
+            if {![handleDNUprop $objID 1]} { return }
+
+            #set the component colors to their DNU values
+            setCompColors $objID $grm::AOEM_Hotkeys::clrDNUcompline $grm::AOEM_Hotkeys::clrDNUcompfill
 
             #add the DNU x visualization
             addDNUx $objID
@@ -745,15 +712,8 @@ namespace eval grm::AOEM_Hotkeys {
     proc addDNUx { objID } {
         #ensure the passed object ID is a non testpoint component and doesn't already have an X visualization over it
         if {[isBOMComponent $objID] && [llength [getXlinesFromComponentID $objID]] == 0} {
-            #Ensure only the component is selected
-            onlyselectByID $objID
 
-            #set the component's fill color
-            setFillColor $grm::AOEM_Hotkeys::clrDNUcompfill
-
-            #set the component's line color
-            setLineColor $grm::AOEM_Hotkeys::clrDNUcompline
-
+            #get the component boundaries, to tell us where to draw the X lines
             set compLeft [getLeftByIDuserUnits $objID]
             set compTop [getTopByIDuserUnits $objID]
             set compRight [getRightByIDuserUnits $objID]
@@ -779,27 +739,95 @@ namespace eval grm::AOEM_Hotkeys {
         if {[isBOMComponent $objID]} {
             #remove BOM property and update fill color as long as it contains DNU currently - otherwise leave it alone
             if { [checkForDNUbyID $objID] } {
-                #Ensure only the component is selected
-                onlyselectByID $objID
+                #Remove the BOM Property based on the the namespace flag setting, or quit if the flag is invalid
+                if {![handleDNUprop $objID 0]} { return }
 
-                #remove the BOM property
-                deleteProp -name "BOM"
-
-                #update the fill color
-                setFillColor $grm::AOEM_Hotkeys::clrDEFcompfill
-
-                #update the line color
-                setLineColor $grm::AOEM_Hotkeys::clrDEFcompline
+                #set the component colors back to their default values
+                setCompColors $objID $grm::AOEM_Hotkeys::clrDEFcompline $grm::AOEM_Hotkeys::clrDEFcompfill
 
                 #remove the DNU x visualization
                 remDNUx $objID
 
                 #Unselect all objects to prevent applying changes to unintentded items
                 unselectAll
-
             }
         }
     }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to handle the addition or removal of the DNU BOM configuration, based on the namespace flag.
+    #   lobjIDs = the component or list of components to handle the property management of
+    #   setProp = set to 1 to add the property, set to 0 to remove the property
+    # ----------------------------------------------------------------------------------
+    proc handleDNUprop { lobjIDs setProp } {
+        #determine which properties we intend to manage, based on the namespace flag
+        if {$grm::AOEM_Hotkeys::flag_DNU_config == [const_DNU_NOT_USED]} {
+            set propertyNames NOT_USED
+        } elseif {$grm::AOEM_Hotkeys::flag_DNU_config == [const_DNU_BOM]} {
+            set propertyNames BOM
+        } elseif {$grm::AOEM_Hotkeys::flag_DNU_config == [const_DNU_BOTH]} {
+            set propertyNames [list NOT_USED BOM]
+        } else {
+            #do nothing since the flag is set to an unsupported value
+            return 0
+        }
+
+        #modifying property data requires that the object's page is active
+        #start by orgnizing the list of passed objects by page, to minimize page transitions
+        set lobjIDs [organizeIDsbyPage $lobjIDs]
+
+        #grab data regarding active page in case we transition away
+        set startingPage [sch::dbGetActivePage]
+        set startingPageSpath [sch::dbGetActivePageSpath]
+
+        #now loop through and handle each object passed
+        foreach objID $lobjIDs {
+
+            #check whether or not we need to change pages for this object
+            if {[sch::dbGetPageOfObject $objID] != [sch::dbGetActivePage]} {
+                #ensure nothing else is selected
+                unselectAll
+
+                #Activate the object's page by selecting while setting navigation to true
+                sch::dbSelectObjectByIdEx $objID $::sch::DBTrue $::sch::DBFalse
+            } else {
+                #ensure only this component is selected
+                onlyselectByID $objID
+            }
+
+            #now that the component's page is active and the component is selected, modify the properties according to the action called
+            foreach propertyName $propertyNames {
+                #start by deleting the property, regardless of whether we're adding it back or not (always allows us to start fresh with the property value)
+                deleteProp -name $propertyName
+
+                #see if the calling function wants this property added back
+                if {$setProp} { addProp -name $propertyName -value DNU -display nodisp }
+            }
+        }
+
+        #see if we need to return the page navigation to the original page
+        if {[sch::dbGetActivePage] != $startingPage} { openItem $startingPageSpath SCH PAGE }
+
+        #flag that we are finished and found a valid global flag
+        return 1
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to set the component colors as follows:
+    #   lobjIDs - the component or list of components to set the colors for
+    #   lineColor - the component's line HTML color to bet set (default is black)
+    #   fillColor - the component's fill HTML color to be set (default is clear)
+    # ----------------------------------------------------------------------------------
+    proc setCompColors { lobjIDs {lineColor "#000000"} {fillColor "none"}} {
+        #ensure only the desired objects are selected
+        onlyselectByID {$lobjIDs}
+
+        #set the line color
+        setLineColor $lineColor
+
+        #set the fill color
+        setFillColor $fillColor
+    } 
 
     # ----------------------------------------------------------------------------------
     # Procedure to remove DNU X Visualization from an object.
@@ -1121,10 +1149,6 @@ namespace eval grm::AOEM_Hotkeys {
             }
         }
 
-        #ideally - we want the currently active page to be placed first into the organized list, so that any calling function
-        #that iterates through this list, would start with processing components on the already active page
-        #To do this, we'll see if the list of pages 
-
         #now loop through the unique pageSpaths and create the organized list with matches from the collected instance locations
         foreach pageSpath $lPageSpaths {
             #first index of the page list is the pageSpath itself
@@ -1174,6 +1198,59 @@ namespace eval grm::AOEM_Hotkeys {
         #return the found ID
         return $objID
     }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to return an organized list of the provided object IDs organized as follows:
+    #   all object IDs will be organized by their page, where the active page is first
+    #
+    #   the intent of this is to provide the calling function with an organized list for looping through, while minimizing page transitions necessary
+    # ----------------------------------------------------------------------------------
+    proc organizeIDsbyPage { lobjIDs } {
+        #setup a couple lists to help with the organization
+        set lpageIDs {}
+        set organizedList {}
+
+        #loop through all object IDs and find the list of pages used
+        foreach objID $lobjIDs {
+            #get this object's page ID
+            set pgID [sch::dbGetPageOfObject $objID]
+
+            #add the pageID to the running list if we haven't already found this one
+            if {[lsearch -exact $lpageIDs $pgID] < 0} {
+                #check if this is the currently active page - if so, make sure it's at the begining of the list, otherwise append
+                if {$pgID == [sch::dbGetActivePage]} {
+                    set lpageIDs [linsert $lpageIDs 0 $pgID]
+                } else {
+                    lappend lpageIDs $pgID
+                }
+            }
+        }
+
+        #now, loop through the list of unique pages - and add each object ID from that page, in the order of the page list
+        foreach pgID $lpageIDs {
+            foreach objID $lobjIDs {
+                if {[sch::dbGetPageOfObject $objID] == $pgID && [lsearch -exact $organizedList $objID] < 0} { lappend organizedList $objID }
+            }
+        }
+
+        #return the newly organized list
+        return $organizedList
+    }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to allow external control to set the DNU config flag to only use the NOT_USED property
+    # ----------------------------------------------------------------------------------
+    proc setDNUconfig_NOT_USED {} { set grm::AOEM_Hotkeys::flag_DNU_config [const_DNU_NOT_USED] }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to allow external control to set the DNU config flag to only use the BOM property
+    # ----------------------------------------------------------------------------------
+    proc setDNUconfig_BOM {} { set grm::AOEM_Hotkeys::flag_DNU_config [const_DNU_BOM] }
+
+    # ----------------------------------------------------------------------------------
+    # Procedure to allow external control to set the DNU config flag to use either/both the BOM and NOT_USED property
+    # ----------------------------------------------------------------------------------
+    proc setDNUconfig_BOTH {} { set grm::AOEM_Hotkeys::flag_DNU_config [const_DNU_BOTH] }
 
     # ----------------------------------------------------------------------------------
     # Create a custom menu bar for all keybindings above
