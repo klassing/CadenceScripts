@@ -4,6 +4,13 @@
 
 **Note:** Unreleased changes are checked in within the [\_drafts\_](_drafts_) folder to allow easier development/testing in the meantime.  Changelogs will only be written once new versions have been moved to the [\_releases\_](_releases_) directory.
 
+## [0.1.1] - 2025-05-29
+
+### Author:   Ryan Klassing
+
+### Description:
+Updated installer.bat to point installations to Allegro 24.1 filepaths.
+
 ## [0.1.0] - 2024-04-25
 
 ### Author:   Ryan Klassing
