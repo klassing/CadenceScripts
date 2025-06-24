@@ -4,7 +4,7 @@
 The intent of this script is to provide several commands for manipulating layer visibility, without requiring custom views to be saved/loaded/cycled.  After installation, basic layer visibility manipulation (top layer, bottom layer, external layers, all layers, etc..) will be added to the menu toolbar under "Layer Visibility" → "Commands".  More capability is exposed by means of the direct Skill Procedures, including the ability to pass in a list of desired layers to be toggled (in case further permutations of "default views" are desired to be saved to funckeys for example).
 
 ## Latest Release
-[v0.1.0](_releases_/v0.1.0/) is the latest release.  Older releases can be found within the [\_releases\_](_releases_) folder.
+[v0.1.1](_releases_/v0.1.1/) is the latest release.  Older releases can be found within the [\_releases\_](_releases_) folder.
 
 ## Automatic Installation
 All files necessary for the installation can be found within each release versions subdirectory.
