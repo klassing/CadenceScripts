@@ -6,7 +6,7 @@ The intent of this script is to simplify the loading of color files based on the
 The default color palette mapping is shown at the bottom of the page in the section "Default ROYGBIV palette" (but as mentioned, the color mapping can be customized as desired).
 
 ## Latest Release
-[v0.1.1](_releases_/v0.1.1/) is the latest release.  Older releases can be found within the [\_releases\_](_releases_) folder.
+[v0.1.2](_releases_/v0.1.2/) is the latest release.  Older releases can be found within the [\_releases\_](_releases_) folder.
 
 ## Automatic Installation
 All files necessary for the installation can be found within each release versions subdirectory.
