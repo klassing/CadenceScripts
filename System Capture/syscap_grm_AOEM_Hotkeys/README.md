@@ -477,7 +477,7 @@ There are several APIs included in this script that were necessary to support th
                         </td>
                     </tr>
                     <tr>
-                        <td>getInstanceLocationsByRefDes [list I1000 I2000]</td>
+                        <td>getInstanceLocationsByRefDes [list I2000 I3000]</td>
                         <td>
                             Let's assume that I3000 is a single gate item and located on page 3, I2000 is a multi gate item with one gate each located on pages 2/3/4, and the user is currently viewing/active on page 3; The returned result will be a list formatted as follows:
                             <br>
